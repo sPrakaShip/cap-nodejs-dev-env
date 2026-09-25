@@ -3,22 +3,28 @@
 ARG VARIANT="24"
 FROM mcr.microsoft.com/devcontainers/javascript-node:${VARIANT}
 
-# Add package info for cf CLI
-RUN wget -q -O - https://packages.cloudfoundry.org/debian/cli.cloudfoundry.org.key \
-  | gpg --dearmor -o /usr/share/keyrings/cli.cloudfoundry.org.gpg \
-  && echo "deb [signed-by=/usr/share/keyrings/cli.cloudfoundry.org.gpg] https://packages.cloudfoundry.org/debian stable main" \
-  | tee /etc/apt/sources.list.d/cloudfoundry-cli.list
-
-# Install some generally useful tools, including cf CLI
+# Install some generally useful tools
 RUN apt-get update \
   && apt-get -y install --no-install-recommends \
-  cf8-cli \
   curl \
   entr \
   git \
   sqlite3 \
   watch \
-  yq
+  yq \
+  && rm -rf /var/lib/apt/lists/*
+
+# Install cf CLI v8 from the release tarball; the Cloud Foundry apt repo's
+# signing key has an expired primary key, which Debian trixie's apt rejects
+ARG TARGETARCH
+RUN case "${TARGETARCH:-amd64}" in \
+    amd64) CF_RELEASE=linux64-binary ;; \
+    arm64) CF_RELEASE=linuxarm64-binary ;; \
+    *) echo "Unsupported architecture: ${TARGETARCH}" && exit 1 ;; \
+  esac \
+  && curl -fsSL "https://packages.cloudfoundry.org/stable?release=${CF_RELEASE}&version=v8&source=github" \
+  | tar -xz -C /usr/local/bin cf8 cf \
+  && cf version
 
 # Install latest SAP CAP SDK globally
 USER node
